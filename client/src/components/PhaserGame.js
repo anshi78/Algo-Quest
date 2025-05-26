@@ -48,141 +48,131 @@ const PhaserGame = () => {
       }
 
       create() {
-        console.log("[Phaser] 🌱 Create running");
-        // Tilemap setup
-        const map = this.make.tilemap({ key: "map" });
-        const tileset1 = map.addTilesetImage("tileset1", "tileset1");
-        const tileset2 = map.addTilesetImage("tileset2", "tileset2");
-        this.groundLayer = map.createLayer("Ground", [tileset1, tileset2], 0, 0);
-        this.objectLayer = map.createLayer("Objects", [tileset1, tileset2], 0, 0);
-        this.groundLayer.setScale(0.5);
-        this.objectLayer.setScale(0.5);
-        if (this.objectLayer) {
-          this.objectLayer.setCollisionByProperty({ collides: true });
-          console.log(this.objectLayer.getTilesWithin().filter(tile => tile.collides));
-        }
-        // --- NPCs Setup ---
-        this.npcs = [];
-        const npcObjects = (map.getObjectLayer('NPCs')?.objects || []).filter(obj => {
-          if (!obj.properties) return false;
-          return obj.properties.some(p => p.name === 'type' && p.value === 'NPC');
-        });
-        npcObjects.forEach(npcData => {
-          // Defensive: check required properties
-          if (typeof npcData.x !== 'number' || typeof npcData.y !== 'number' || !npcData.name) return;
-          const x = npcData.x * 0.5;
-          const y = (npcData.y * 0.5) - (npcData.height || 0);
-          let spriteKey = npcData.properties?.find(p => p.name === 'spriteKey')?.value || npcData.name || 'monk1';
-          if (!this.textures.exists(spriteKey)) spriteKey = 'monk1';
-          const npc = this.physics.add.sprite(x, y, spriteKey).setOrigin(0, 0);
-          npc.setScale(1.5);
-          npc.setDepth(10);
-          npc.setImmovable(true);
-          npc.body.setSize(npc.width, npc.height, true);
-          npc.npcName = npcData.name;
-          npc.facing = 'down';
-          if (Array.isArray(npcData.properties)) {
-            npcData.properties.forEach(prop => {
-              npc[prop.name] = prop.value;
-            });
-          }
-          this.physics.add.collider(npc, this.objectLayer);
-          this.npcs.push(npc);
-        });
-        // --- End NPCs Setup ---
+  const map = this.make.tilemap({ key: "map" });
+  const tileset1 = map.addTilesetImage("tileset1", "tileset1");
+  const tileset2 = map.addTilesetImage("tileset2", "tileset2");
 
-        // Player setup
-        this.player = this.physics.add.sprite(600, 200, "player", 0);
-        this.player.setCollideWorldBounds(true);
-        this.player.setScale(1.5);
-        this.player.body.setSize(this.player.width, this.player.height, true);
-        this.playerMovementEnabled = true;
-        this.physics.add.collider(this.player, this.objectLayer);
-        this.npcs.forEach(npc => this.physics.add.collider(this.player, npc));
+  const screenW = this.cameras.main.width;
+  const screenH = this.cameras.main.height;
+  const mapWidth = map.widthInPixels;
+  const mapHeight = map.heightInPixels;
+  const scaleX = screenW / mapWidth;
+  const scaleY = screenH / mapHeight;
+  const scaleFactor = Math.min(scaleX, scaleY);
+  const offsetX = (screenW - mapWidth * scaleFactor) / 2;
+  const offsetY = (screenH - mapHeight * scaleFactor) / 2;
 
-        // Dialogue Manager
-        this.dialogueManager = new DialogueManager(this, map.widthInPixels , () => {
-          this.playerMovementEnabled = false; // disable on dialogue open
-        }, () => {
-          this.playerMovementEnabled = true; // re-enable on dialogue close
+  this.groundLayer = map.createLayer("Ground", [tileset1, tileset2], offsetX, offsetY).setScale(scaleFactor);
+  this.objectLayer = map.createLayer("Objects", [tileset1, tileset2], offsetX, offsetY).setScale(scaleFactor);
+  this.objectLayer.setCollisionByProperty({ collides: true });
+
+  // Set player spawn near the door (bottom center), but inside the playable area
+  const playerX = offsetX + (map.widthInPixels / 2) * scaleFactor;
+  const playerY = offsetY + (map.heightInPixels - 192) * scaleFactor;
+
+  // Center-aligned NPC setup
+  this.npcs = [];
+  const npcObjects = (map.getObjectLayer('NPCs')?.objects || []).filter(obj => {
+    if (!obj.properties) return false;
+    return obj.properties.some(p => p.name === 'type' && p.value === 'NPC');
+  });
+
+  npcObjects.forEach(npcData => {
+    if (typeof npcData.x !== 'number' || typeof npcData.y !== 'number' || !npcData.name) return;
+
+    const x = offsetX + npcData.x * scaleFactor;
+    const y = offsetY + (npcData.y - (npcData.height || 0)) * scaleFactor;
+
+    let spriteKey = npcData.properties?.find(p => p.name === 'spriteKey')?.value || npcData.name || 'monk1';
+    if (!this.textures.exists(spriteKey)) spriteKey = 'monk1';
+
+   // NPC
+const npc = this.physics.add.sprite(x, y, spriteKey).setOrigin(0.5, 0.5);
+npc.setScale(3.2 * scaleFactor);
+npc.setDepth(10);
+npc.setImmovable(true);
+npc.body.setSize(npc.width * 0.6, npc.height * 0.8, true);
+
+  
+
+    npc.body.setSize(npc.width, npc.height, true);
+    npc.npcName = npcData.name;
+    npc.facing = 'down';
+
+    if (Array.isArray(npcData.properties)) {
+      npcData.properties.forEach(prop => {
+        npc[prop.name] = prop.value;
+      });
+    }
+
+    this.physics.add.collider(npc, this.objectLayer);
+    this.npcs.push(npc);
+  });
+
+  // --- End NPCs Setup ---
+
+  this.player = this.physics.add.sprite(playerX, playerY, "player", 0);
+  this.player.setCollideWorldBounds(false);
+  this.player.setScale(1.2);
+  this.player.body.setSize(this.player.width, this.player.height, true);
+  this.playerMovementEnabled = true;
+  this.physics.add.collider(this.player, this.objectLayer);
+  this.npcs.forEach(npc => this.physics.add.collider(this.player, npc));
+
+  // Dialogue Manager
+  this.dialogueManager = new DialogueManager(this, map.widthInPixels , () => {
+    this.playerMovementEnabled = false;
+  }, () => {
+    this.playerMovementEnabled = true;
+  });
+
+  // ✅ Camera setup (added safely below)
+  this.cameras.main.setBounds(0, 0, map.widthInPixels * scaleFactor, map.heightInPixels * scaleFactor);
+  this.physics.world.setBounds(0, 0, map.widthInPixels * scaleFactor, map.heightInPixels * scaleFactor);
+  this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+
+  // Animations
+  this.anims.create({ key: "walk-down", frames: this.anims.generateFrameNumbers("player", { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
+  this.anims.create({ key: "walk-left", frames: this.anims.generateFrameNumbers("player", { start: 4, end: 7 }), frameRate: 8, repeat: -1 });
+  this.anims.create({ key: "walk-right", frames: this.anims.generateFrameNumbers("player", { start: 8, end: 11 }), frameRate: 8, repeat: -1 });
+  this.anims.create({ key: "walk-up", frames: this.anims.generateFrameNumbers("player", { start: 12, end: 15 }), frameRate: 8, repeat: -1 });
+  this.anims.create({ key: "idle-down", frames: [{ key: "player", frame: 0 }], frameRate: 1 });
+  this.anims.create({ key: "idle-left", frames: [{ key: "player", frame: 4 }], frameRate: 1 });
+  this.anims.create({ key: "idle-right", frames: [{ key: "player", frame: 8 }], frameRate: 1 });
+  this.anims.create({ key: "idle-up", frames: [{ key: "player", frame: 12 }], frameRate: 1 });
+
+  // Controls
+  this.cursors = this.input.keyboard.createCursorKeys();
+  this.wasd = this.input.keyboard.addKeys({
+    up: Phaser.Input.Keyboard.KeyCodes.W,
+    down: Phaser.Input.Keyboard.KeyCodes.S,
+    left: Phaser.Input.Keyboard.KeyCodes.A,
+    right: Phaser.Input.Keyboard.KeyCodes.D,
+  });
+  this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+ 
+
+   // Example: Learn Binary Search when interacting with a certain NPC
+        this.input.keyboard.on('keydown-B', () => {
+          console.log("📚 Binary Search learned!");
+          setAlgorithmLearned("Binary Search");
         });
 
-        // Camera setup
-        this.cameras.main.startFollow(this.player);
-        this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+        this.input.keyboard.on('keydown-U', () => {
+          console.log("📚 Bubble Sort learned!");
+          setAlgorithmLearned("Bubble Sort");
+        });
 
-        // Animations
-        this.anims.create({
-          key: "walk-down",
-          frames: this.anims.generateFrameNumbers("player", { start: 0, end: 3 }),
-          frameRate: 8,
-          repeat: -1,
+        this.input.keyboard.on('keydown-D', () => {
+          console.log("📚 DFS learned!");
+          setAlgorithmLearned("DFS");
         });
-        this.anims.create({
-          key: "walk-left",
-          frames: this.anims.generateFrameNumbers("player", { start: 4, end: 7 }),
-          frameRate: 8,
-          repeat: -1,
-        });
-        this.anims.create({
-          key: "walk-right",
-          frames: this.anims.generateFrameNumbers("player", { start: 8, end: 11 }),
-          frameRate: 8,
-          repeat: -1,
-        });
-        this.anims.create({
-          key: "walk-up",
-          frames: this.anims.generateFrameNumbers("player", { start: 12, end: 15 }),
-          frameRate: 8,
-          repeat: -1,
-        });
-        this.anims.create({
-          key: "idle-down",
-          frames: [{ key: "player", frame: 0 }],
-          frameRate: 1,
-        });
-        this.anims.create({
-          key: "idle-left",
-          frames: [{ key: "player", frame: 4 }],
-          frameRate: 1,
-        });
-        this.anims.create({
-          key: "idle-right",
-          frames: [{ key: "player", frame: 8 }],
-          frameRate: 1,
-        });
-        this.anims.create({
-          key: "idle-up",
-          frames: [{ key: "player", frame: 12 }],
-          frameRate: 1,
-        });
-        /*this.anims.create({
-          key: 'npc_idle',
-          frames: this.anims.generateFrameNumbers('monk1', { start: 0, end: 3 }),
-          frameRate: 6,
-          repeat: -1
-        });
-        this.monk1.anims.play('npc_idle');*/
 
-        // Controls
-        this.cursors = this.input.keyboard.createCursorKeys();
-        this.wasd = this.input.keyboard.addKeys({
-          up: Phaser.Input.Keyboard.KeyCodes.W,
-          down: Phaser.Input.Keyboard.KeyCodes.S,
-          left: Phaser.Input.Keyboard.KeyCodes.A,
-          right: Phaser.Input.Keyboard.KeyCodes.D,
-        });
-        this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
-        /*//Collision Debug
-        const debugGraphics = this.add.graphics().setAlpha(0.75);
-        this.objectLayer.renderDebug(debugGraphics, {
-            tileColor: null, // Non-colliding tiles are not colored
-            collidingTileColor: new Phaser.Display.Color(243, 134, 48, 255), // Orange-ish color
-            faceColor: new Phaser.Display.Color(40, 39, 37, 255) // Face edges of colliding tiles
-        });*/
-      }
+  
+}
+
+
 
       update() {
         const speed = 150;
@@ -262,7 +252,7 @@ const PhaserGame = () => {
         }
         // Use a tight threshold for interaction (e.g., 30px)
         if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
-          if (closestNPC && minDist < 70) {
+          if (closestNPC && minDist < 100) {
             // Face NPC toward player and set correct frame
             const dx = this.player.x - closestNPC.x;
             const dy = this.player.y - closestNPC.y;

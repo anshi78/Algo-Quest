@@ -1,5 +1,8 @@
 {
   "dependencies": {
-    "phaser": "^3.88.2"
+    "autoprefixer": "^10.4.21",
+    "phaser": "^3.88.2",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.7"
   }
 }
